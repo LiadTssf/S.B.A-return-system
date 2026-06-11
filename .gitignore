@@ -1,0 +1,15 @@
+node_modules
+dist
+dist-ssr
+*.local
+.env
+.env.local
+.env.*.local
+
+# קובץ עץ הראוטים נוצר אוטומטית ע"י TanStack Router plugin
+src/routeTree.gen.ts
+
+.DS_Store
+*.log
+.vscode/*
+!.vscode/extensions.json
