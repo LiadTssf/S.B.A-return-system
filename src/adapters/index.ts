@@ -18,6 +18,7 @@ import { supabaseCasesAdapter } from "./supabaseCasesAdapter";
 import { supabaseScheduleAdapter } from "./supabaseScheduleAdapter";
 import { supabaseActionItemsAdapter } from "./supabaseActionItemsAdapter";
 import { supabaseAuditAdapter } from "./supabaseAuditAdapter";
+import { supabaseSearchAdapter } from "./supabaseSearchAdapter";
 
 export { SUPABASE_ENABLED };
 
@@ -34,16 +35,18 @@ export const actionItemsAdapter: typeof mockActionItemsAdapter = SUPABASE_ENABLE
 export const auditAdapter: typeof mockAuditAdapter = SUPABASE_ENABLED
   ? supabaseAuditAdapter
   : mockAuditAdapter;
+export const searchAdapter: typeof mockSearchAdapter = SUPABASE_ENABLED
+  ? supabaseSearchAdapter
+  : mockSearchAdapter;
 
 // ── עדיין mock (השלב הבא) ──
-// documents: Base64 — יוחלף ב-Supabase Storage.
+// documents: Base64 — יוחלף ב-Supabase Storage (PART 2).
 // customer-links / notifications: mock (מוגנים מדליפת seed במצב Supabase).
-// reminders / search: mock.
+// reminders: mock.
 export const documentsAdapter = mockDocumentsAdapter;
 export const notificationsAdapter = mockNotificationsAdapter;
 export const customerLinksAdapter = mockCustomerLinksAdapter;
 export const remindersAdapter = mockRemindersAdapter;
-export const searchAdapter = mockSearchAdapter;
 
 // טיפוסים ועזרים נפוצים — חשיפה דרך משטח ייבוא יחיד
 export type { CaseInput } from "./mockCasesAdapter";
@@ -61,7 +64,7 @@ export { EMPTY_FILTERS } from "./mockSearchAdapter";
 if (typeof window !== "undefined") {
   if (SUPABASE_ENABLED) {
     console.info(
-      "%c[SBA] מחובר ל-Supabase. תיקים/תיאום/action-items/audit = DB. מסמכים/לקוח/התראות = עדיין mock.",
+      "%c[SBA] מחובר ל-Supabase. תיקים/תיאום/action-items/audit/חיפוש = DB. מסמכים/לקוח/התראות = עדיין mock.",
       "color:#6FA32E",
     );
   } else {
