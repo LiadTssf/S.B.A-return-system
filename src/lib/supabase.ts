@@ -2,8 +2,15 @@
 // אין סודות בקוד. ערכים מגיעים מ-.env.local (ראה .env.local.example).
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+// נרמול: מקבלים את כתובת הפרויקט הבסיסית. אם הודבקה בטעות כתובת ה-REST
+// (מסתיימת ב-/rest/v1) או עם / בסוף — מסירים אותם.
+function normalizeUrl(u?: string): string | undefined {
+  if (!u) return u;
+  return u.trim().replace(/\/+$/, "").replace(/\/rest\/v1$/, "");
+}
+
+const url = normalizeUrl(import.meta.env.VITE_SUPABASE_URL);
+const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY?.trim();
 
 export const isSupabaseConfigured = Boolean(url && anonKey);
 

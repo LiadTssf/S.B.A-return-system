@@ -2,6 +2,7 @@
 // TODO: Replace with Supabase (טבלת customer_tokens עם token_hash, expires_at, used_at).
 //       חשוב: אסור לייצר טוקני פרודקשן בצד לקוח בלבד.
 import * as store from "./mock/customer-link-store";
+import { SUPABASE_ENABLED } from "./config";
 import type {
   CustomerActionType,
   CustomerLinkToken,
@@ -15,6 +16,7 @@ export const CUSTOMER_SYNC_MESSAGE = store.CUSTOMER_SYNC_MESSAGE;
 
 export const mockCustomerLinksAdapter = {
   async tokensForCase(caseId: string): Promise<CustomerLinkToken[]> {
+    if (SUPABASE_ENABLED) return []; // עדיין לא הוגר — מונע דליפת seed
     return store.getTokensForCase(caseId);
   },
   async getToken(token: string): Promise<CustomerLinkToken | null> {
@@ -32,12 +34,15 @@ export const mockCustomerLinksAdapter = {
     return store.createToken(input);
   },
   async submissionsForCase(caseId: string): Promise<CustomerSubmission[]> {
+    if (SUPABASE_ENABLED) return [];
     return store.getSubmissions(caseId);
   },
   async allSubmissions(): Promise<CustomerSubmission[]> {
+    if (SUPABASE_ENABLED) return [];
     return store.getAllSubmissions();
   },
   async pendingForCase(caseId: string): Promise<CustomerSubmission[]> {
+    if (SUPABASE_ENABLED) return [];
     return store.getPendingSubmissions(caseId);
   },
   async addSubmission(input: {

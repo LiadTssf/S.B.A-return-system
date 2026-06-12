@@ -20,6 +20,7 @@
 4. **הרץ את ה-migrations** — דרך SQL Editor ב-Supabase (העתק-הדבק את תוכן הקבצים לפי הסדר):
    - `migrations/0001_init.sql` — טבלאות הליבה
    - `migrations/0002_storage.sql` — bucket למסמכים
+   - `migrations/0003_grants.sql` — הרשאות גישה ל-anon (חובה! בלי זה: "permission denied for table")
 
 5. **הפעל מחדש את `npm run dev`** — כשהמשתנים מוגדרים, האפליקציה תעבור אוטומטית ל-Supabase adapters. בלי הגדרה היא ממשיכה לרוץ על mock (localStorage).
 
