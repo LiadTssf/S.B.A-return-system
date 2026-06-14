@@ -9,8 +9,10 @@ import {
   notificationsAdapter,
   auditAdapter,
   CHANNEL_LABELS,
+  SUPABASE_ENABLED,
   type NotificationChannel,
 } from "@/adapters";
+import { PrototypeNotice } from "./prototype-notice";
 import { useNotifications } from "@/hooks/use-notifications";
 import { useSchedule } from "@/hooks/use-schedule";
 import { toast } from "sonner";
@@ -89,6 +91,12 @@ export function NotificationsCard({ caseData, readOnly }: Props) {
         </div>
       </CardHeader>
       <CardContent>
+        {SUPABASE_ENABLED && (
+          <PrototypeNotice title="תקשורת לקוח — סימולציה (לא מחובר ל-Supabase)">
+            אין שליחת WhatsApp/SMS/Email אמיתית, וההודעות אינן נשמרות ב-Supabase.
+            למימוש נדרש: ספק WhatsApp Business API (Epic 6) + טבלת הודעות.
+          </PrototypeNotice>
+        )}
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             לא נשלחו עדיין הודעות ללקוח עבור תיק זה.

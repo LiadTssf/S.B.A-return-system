@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { ExternalShell } from "./external-shell";
-import { casesAdapter, customerLinksAdapter, auditAdapter } from "@/adapters";
+import { PrototypeNotice } from "./prototype-notice";
+import { casesAdapter, customerLinksAdapter, auditAdapter, SUPABASE_ENABLED } from "@/adapters";
 import {
   CUSTOMER_ACTION_LABELS,
   type CustomerActionType,
@@ -72,6 +73,12 @@ export function ExternalTokenGuard({ token, expectedAction, children }: Props) {
           <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
           <p className="text-destructive">{state.message}</p>
         </div>
+        {SUPABASE_ENABLED && (
+          <PrototypeNotice title="ממשק לקוח חיצוני — אבטיפוס">
+            אימות הקישורים החד-פעמיים עדיין אינו מחובר ל-Supabase. למימוש נדרש: טבלת
+            customer_tokens + יצירה/אימות טוקן בצד שרת (Edge Function).
+          </PrototypeNotice>
+        )}
       </ExternalShell>
     );
   }

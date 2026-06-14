@@ -19,7 +19,8 @@ import {
   CAN_REVIEW_CUSTOMER_SUBMISSION,
 } from "@/lib/permissions";
 import { useCaseSubmissions } from "@/hooks/use-customer-links";
-import { customerLinksAdapter, scheduleAdapter, casesAdapter, auditAdapter, actionItemsAdapter } from "@/adapters";
+import { customerLinksAdapter, scheduleAdapter, casesAdapter, auditAdapter, actionItemsAdapter, SUPABASE_ENABLED } from "@/adapters";
+import { PrototypeNotice } from "./prototype-notice";
 import {
   CUSTOMER_ACTION_LABELS,
   getScheduleRequestSegments,
@@ -128,6 +129,12 @@ export function CustomerSubmissionsCard({ caseId }: Props) {
         <CardTitle className="text-base">בקשות ופעולות לקוח</CardTitle>
       </CardHeader>
       <CardContent>
+        {SUPABASE_ENABLED && (
+          <PrototypeNotice title="בקשות לקוח — אבטיפוס (לא מחובר ל-Supabase)">
+            זרימת הלקוח (WhatsApp/קישורים/חתימות) עדיין בסימולציה ואינה נשמרת ב-Supabase.
+            למימוש נדרש: טבלת customer_tokens + יצירה/אימות טוקן בצד שרת.
+          </PrototypeNotice>
+        )}
         {items.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             אין כרגע בקשות מהלקוח עבור תיק זה.

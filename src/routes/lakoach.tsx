@@ -102,7 +102,8 @@ function LakoachPage() {
       <div className="flex items-start gap-2 rounded-md border border-accent/40 bg-accent/10 p-3 text-xs">
         <Info className="h-4 w-4 shrink-0 text-accent-foreground" />
         <p className="text-accent-foreground">
-          סימולציה בלבד — לא מחובר ל-WhatsApp אמיתי, אין שליחת הודעות חיצוניות. הקישורים מובילים לדפי המערכת.
+          סימולציה בלבד — לא מחובר ל-WhatsApp אמיתי. פתיחת/עדכון תיק נשמרים ב-Supabase,
+          אך שכבת הלקוח (הודעות, קישורים חד-פעמיים, חתימות, בקשות) היא אבטיפוס ואינה נשמרת ב-Supabase.
         </p>
       </div>
 

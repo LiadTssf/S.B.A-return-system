@@ -24,8 +24,10 @@ import {
   remindersAdapter,
   auditAdapter,
   actionItemsAdapter,
+  SUPABASE_ENABLED,
   type ReminderType,
 } from "@/adapters";
+import { PrototypeNotice } from "./prototype-notice";
 import { useRole } from "@/hooks/use-role";
 import { ROLE_LABELS } from "@/lib/roles";
 import { toast } from "sonner";
@@ -104,6 +106,12 @@ export function ReminderDialog({ caseId, trigger }: Props) {
               תזכורת פנימית למתאמת בלבד. לא נשלחת ללקוח ולא לערוץ חיצוני.
             </DialogDescription>
           </DialogHeader>
+          {SUPABASE_ENABLED && (
+            <PrototypeNotice title="תזכורות — אבטיפוס (מקומי בלבד)">
+              תזכורות נשמרות כרגע מקומית בדפדפן ואינן מחוברות ל-Supabase. למימוש נדרש:
+              טבלת reminders + תזמון נגזרת ל-action items.
+            </PrototypeNotice>
+          )}
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="rem-type">סוג תזכורת</Label>
