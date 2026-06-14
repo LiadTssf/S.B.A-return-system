@@ -27,6 +27,7 @@ import {
 import { ROLE_LABELS } from "@/lib/roles";
 import {
   DOCUMENT_CATEGORY_LABELS,
+  docDisplayName,
   formatBytes,
   isImage,
   type CaseDocument,
@@ -69,7 +70,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
     setPreview(d);
     auditAdapter.log("document_viewed", {
       caseId,
-      detail: `${DOCUMENT_CATEGORY_LABELS[d.category]} · ${d.fileName}`,
+      detail: `${DOCUMENT_CATEGORY_LABELS[d.category]} · ${docDisplayName(d)}`,
     });
   };
 
@@ -149,12 +150,13 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
               attachment: input.attachment,
               file: input.file,
               fileName: input.file.name,
+              title: input.title,
               mimeType: input.file.type,
               sizeBytes: input.file.size,
               uploadedBy: caseCreatedBy || ROLE_LABELS[role],
               uploadedByRole: ROLE_LABELS[role],
             });
-            const detail = `${DOCUMENT_CATEGORY_LABELS[doc.category]} · ${doc.fileName}`;
+            const detail = `${DOCUMENT_CATEGORY_LABELS[doc.category]} · ${docDisplayName(doc)}`;
             await auditAdapter.log("document_uploaded", { caseId, detail });
             const specific = TYPE_AUDIT[doc.category];
             if (specific) await auditAdapter.log(specific, { caseId, detail });
@@ -171,7 +173,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>מחיקת קובץ</AlertDialogTitle>
             <AlertDialogDescription>
-              למחוק את "{toDelete?.fileName}"? לא ניתן לשחזר פעולה זו.
+              למחוק את "{toDelete ? docDisplayName(toDelete) : ""}"? לא ניתן לשחזר פעולה זו.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -182,7 +184,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
                 await documentsAdapter.remove(toDelete.id);
                 auditAdapter.log("delete_document", {
                   caseId,
-                  detail: `${DOCUMENT_CATEGORY_LABELS[toDelete.category]} · ${toDelete.fileName}`,
+                  detail: `${DOCUMENT_CATEGORY_LABELS[toDelete.category]} · ${docDisplayName(toDelete)}`,
                 });
                 toast.success("הקובץ נמחק");
                 setToDelete(null);
@@ -247,7 +249,7 @@ function DocRow({
         type="button"
         onClick={() => onPreview(d)}
         className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background"
-        aria-label={`צפייה ב-${d.fileName}`}
+        aria-label={`צפייה ב-${docDisplayName(d)}`}
       >
         {isImage(d.mimeType) && url ? (
           <img src={url} alt={d.fileName} className="h-full w-full object-cover" />
@@ -261,8 +263,13 @@ function DocRow({
           onClick={() => onPreview(d)}
           className="truncate text-right text-sm font-medium hover:underline"
         >
-          {d.fileName}
+          {docDisplayName(d)}
         </button>
+        {d.title?.trim() && (
+          <span className="truncate text-[11px] text-muted-foreground" dir="ltr">
+            {d.fileName}
+          </span>
+        )}
         <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
           <Badge variant="outline" className="gap-1 font-normal">
             {isImage(d.mimeType) ? (
@@ -301,9 +308,9 @@ function DocPreview({ doc }: { doc: CaseDocument }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-0.5">
-        <h3 className="text-base font-semibold">{doc.fileName}</h3>
+        <h3 className="text-base font-semibold">{docDisplayName(doc)}</h3>
         <p className="text-xs text-muted-foreground">
-          {DOCUMENT_CATEGORY_LABELS[doc.category]} · {formatBytes(doc.sizeBytes)}
+          {DOCUMENT_CATEGORY_LABELS[doc.category]} · {doc.fileName} · {formatBytes(doc.sizeBytes)}
         </p>
       </div>
       {!url ? (

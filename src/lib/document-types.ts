@@ -30,7 +30,7 @@ export type DocumentAttachment =
 export interface CaseDocument {
   id: string;
   caseId: string;
-  /** שם תצוגה — שם הקובץ (אין עמודת title בסכימה). */
+  /** שם תצוגה ידידותי (אופציונלי). אם ריק — מציגים את fileName (ראה docDisplayName). */
   title: string;
   category: DocumentCategory;
   attachment: DocumentAttachment;
@@ -55,10 +55,18 @@ export interface AddDocumentInput {
   attachment: DocumentAttachment;
   file: File;
   fileName: string;
+  /** שם תצוגה ידידותי (אופציונלי). אם ריק — תוצג שם הקובץ. */
+  title?: string;
   mimeType: string;
   sizeBytes: number;
   uploadedBy: string;
   uploadedByRole: string;
+}
+
+/** שם התצוגה של מסמך: כותרת אם קיימת, אחרת שם הקובץ. */
+export function docDisplayName(doc: { title?: string; fileName: string }): string {
+  const t = doc.title?.trim();
+  return t && t.length > 0 ? t : doc.fileName;
 }
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB לקובץ

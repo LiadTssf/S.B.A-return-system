@@ -38,12 +38,13 @@ async function cleanup() {
   await sb.from("return_cases").delete().eq("id", CASE_ID);
 }
 
-async function uploadDoc(docType, fileName, body) {
+async function uploadDoc(docType, fileName, body, title) {
   const objectPath = `${CASE_ID}/${docType}/${Date.now()}-${fileName}`;
   const up = await sb.storage.from(BUCKET).upload(objectPath, new Blob([body], { type: "text/plain" }), { contentType: "text/plain" });
   if (up.error) throw up.error;
   const { error } = await sb.from("case_documents").insert({
     return_case_id: CASE_ID, document_type: docType, file_name: fileName,
+    title: title ?? null,
     storage_provider: "supabase", bucket_name: BUCKET, object_path: objectPath,
     mime_type: "text/plain", size_bytes: body.length, uploaded_by: "smoke",
   });
@@ -58,14 +59,21 @@ async function main() {
     site: "—", equipment_type: "rental", status: "awaiting_return", created_by: "smoke",
   });
 
-  console.log("[1] העלאת תעודת משלוח (delivery_note)");
+  console.log("[1] העלאת תעודת משלוח (delivery_note) עם כותרת");
   let p1;
-  try { p1 = await uploadDoc("delivery_note", "delivery.txt", "DELIVERY NOTE"); ok("הועלה + metadata נשמר: " + p1); }
+  try { p1 = await uploadDoc("delivery_note", "delivery.txt", "DELIVERY NOTE", "תעודת משלוח 4523"); ok("הועלה + metadata נשמר: " + p1); }
   catch (e) { bad("upload delivery_note", e); }
 
-  console.log("[2] קריאת metadata");
+  console.log("[2] קריאת metadata + אימות כותרת");
   const { data: docs, error: de } = await sb.from("case_documents").select("*").eq("return_case_id", CASE_ID);
-  de ? bad("select", de) : ok(`נמצאו ${docs.length} מסמכים בטבלה`);
+  if (de) bad("select", de);
+  else {
+    ok(`נמצאו ${docs.length} מסמכים בטבלה`);
+    const dn = docs.find((d) => d.document_type === "delivery_note");
+    dn && dn.title === "תעודת משלוח 4523"
+      ? ok(`כותרת נשמרה ונשלפה: "${dn.title}" (file_name: ${dn.file_name})`)
+      : bad(`כותרת לא נשמרה כצפוי — title=${JSON.stringify(dn?.title)}`);
+  }
 
   console.log("[3] signed URL + הורדה");
   if (p1) {
@@ -85,9 +93,13 @@ async function main() {
     ? ok("יש תעודה, אין תמונת משאית → סגירה חסומה (צפוי)")
     : bad(`מצב לא צפוי: cert=${cert1} photo=${photo1}`);
 
-  console.log("[5] העלאת תמונת משאית (truck_photo) → סגירה מותרת");
-  try { await uploadDoc("truck_photo", "truck.txt", "TRUCK PHOTO"); ok("תמונת משאית הועלתה"); }
+  console.log("[5] העלאת תמונת משאית (truck_photo) ללא כותרת → fallback");
+  try { await uploadDoc("truck_photo", "truck.txt", "TRUCK PHOTO"); ok("תמונת משאית הועלתה (ללא כותרת)"); }
   catch (e) { bad("upload truck_photo", e); }
+  const { data: tp } = await sb.from("case_documents").select("title, file_name").eq("return_case_id", CASE_ID).eq("document_type", "truck_photo").maybeSingle();
+  tp && (tp.title === null || tp.title === undefined)
+    ? ok(`ללא כותרת → title=NULL, התצוגה תיפול ל-file_name (${tp.file_name})`)
+    : bad(`ציפינו ל-title=NULL, התקבל ${JSON.stringify(tp?.title)}`);
   const cert2 = await hasReturnDoc(CASE_ID);
   const photo2 = await hasTruckPhoto(CASE_ID);
   cert2 && photo2 ? ok("יש תעודה + תמונה → סגירה מותרת (צפוי)") : bad(`מצב לא צפוי: cert=${cert2} photo=${photo2}`);

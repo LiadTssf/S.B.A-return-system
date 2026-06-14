@@ -27,6 +27,7 @@ import { useCaseDocuments } from "@/hooks/use-documents";
 import { useDocUrl } from "@/hooks/use-doc-url";
 import {
   DOCUMENT_CATEGORY_LABELS,
+  docDisplayName,
   isImage,
   type CaseDocument,
 } from "@/lib/document-types";
@@ -440,7 +441,7 @@ function AttachedDoc({ doc: d }: { doc: CaseDocument }) {
           </span>
         )}
         <span className="flex flex-col items-start">
-          <span className="max-w-[160px] truncate font-medium">{d.fileName}</span>
+          <span className="max-w-[160px] truncate font-medium">{docDisplayName(d)}</span>
           <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
             <ImageIcon className="h-2.5 w-2.5" />
             {DOCUMENT_CATEGORY_LABELS[d.category]}

@@ -37,7 +37,7 @@ export const mockDocumentsAdapter = {
     const doc: CaseDocument = {
       id: crypto.randomUUID(),
       caseId: input.caseId,
-      title: input.fileName,
+      title: input.title?.trim() || "",
       category: input.category,
       attachment: input.attachment,
       fileName: input.fileName,

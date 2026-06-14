@@ -35,6 +35,7 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   segments: ScheduleSegment[];
   onSubmit: (data: {
+    title: string;
     category: DocumentCategory;
     attachment: DocumentAttachment;
     file: File;
@@ -42,6 +43,7 @@ interface Props {
 }
 
 export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }: Props) {
+  const [title, setTitle] = useState("");
   const [category, setCategory] = useState<DocumentCategory>("delivery_note");
   const [attachTo, setAttachTo] = useState<string>("case"); // "case" | segmentId
   const [file, setFile] = useState<File | null>(null);
@@ -50,6 +52,7 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
 
   useEffect(() => {
     if (!open) {
+      setTitle("");
       setCategory("delivery_note");
       setAttachTo("case");
       setFile(null);
@@ -77,7 +80,7 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
       attachTo === "case" ? { type: "case" } : { type: "segment", segmentId: attachTo };
     setBusy(true);
     try {
-      await onSubmit({ category, attachment, file });
+      await onSubmit({ title: title.trim(), category, attachment, file });
     } finally {
       setBusy(false);
     }
@@ -94,6 +97,17 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="doc-title">כותרת (אופציונלי)</Label>
+            <Input
+              id="doc-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              maxLength={120}
+              placeholder="אם ריק — יוצג שם הקובץ"
+            />
+          </div>
+
           <div className="flex flex-col gap-1.5">
             <Label>סוג מסמך *</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as DocumentCategory)}>

@@ -63,6 +63,7 @@ function SignForm({ token, caseId, customer }: { token: string; caseId: string; 
       attachment: { type: "case" },
       file: sigFile,
       fileName: sigFile.name,
+      title: `חתימה על נוהל ההחזרה — ${name.trim()}`,
       mimeType: sigFile.type,
       sizeBytes: sigFile.size,
       uploadedBy: name.trim(),

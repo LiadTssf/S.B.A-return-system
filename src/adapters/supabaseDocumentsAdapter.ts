@@ -18,7 +18,7 @@ function toDoc(r: any): CaseDocument {
   return {
     id: r.id,
     caseId: r.return_case_id,
-    title: r.file_name, // אין עמודת title בסכימה — שם הקובץ הוא שם התצוגה
+    title: r.title ?? "", // אם NULL — התצוגה תיפול חזרה ל-fileName (docDisplayName)
     category: r.document_type,
     attachment: r.segment_id
       ? { type: "segment", segmentId: r.segment_id }
@@ -113,6 +113,7 @@ export const supabaseDocumentsAdapter = {
         segment_id: segmentId,
         document_type: input.category,
         file_name: input.fileName,
+        title: input.title?.trim() || null,
         storage_provider: "supabase",
         bucket_name: BUCKET,
         object_path: objectPath,

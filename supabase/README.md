@@ -21,6 +21,7 @@
    - `migrations/0001_init.sql` — טבלאות הליבה
    - `migrations/0002_storage.sql` — bucket למסמכים
    - `migrations/0003_grants.sql` — הרשאות גישה ל-anon (חובה! בלי זה: "permission denied for table")
+   - `migrations/0004_case_documents_title.sql` — עמודת כותרת תצוגה למסמכים
 
 5. **הפעל מחדש את `npm run dev`** — כשהמשתנים מוגדרים, האפליקציה תעבור אוטומטית ל-Supabase adapters. בלי הגדרה היא ממשיכה לרוץ על mock (localStorage).
 
