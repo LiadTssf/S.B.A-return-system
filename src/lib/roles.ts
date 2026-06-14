@@ -1,32 +1,52 @@
-// בידוד לוגיקת התפקידים (RBAC) — מקור אמת יחיד למערכת.
-// כרגע התפקיד הפעיל נשמר מקומית לצורכי פיתוח בלבד (אין עדיין אימות אמיתי).
-// TODO: יוחלף ב-Supabase Auth + טבלת users + RLS (אכיפה בצד שרת).
+// בידוד לוגיקת התפקידים (RBAC) — מקור אמת יחיד.
+// מקור התפקיד: הפרופיל המאומת (Supabase Auth). ה-AuthProvider מזרים את ה-session לכאן
+// דרך setAuthSession, וה-adapters/קומפוננטות קוראים getActiveRole/getActiveUserId.
 
-export type Role = "coordinator" | "logistics" | "factory_manager" | "external_client";
+export type Role =
+  | "coordinator"
+  | "logistics"
+  | "factory_manager"
+  | "admin"
+  | "external_client"; // לא תפקיד עובד — נשמר לתאימות (טוקני לקוח חיצוני)
 
-// מיפוי לשמות התפקידים המיועדים לפרודקשן (כשנוסיף Auth):
-//   coordinator      => return_coordinator
-//   logistics        => logistics_manager
-//   factory_manager  => plant_manager
-//   (admin — יתווסף בעתיד)
-
+// שם עתידי אפשרי: logistics => logistics_manager (ידרוש migration + עדכון קוד).
 export const ROLE_LABELS: Record<Role, string> = {
   coordinator: "מתאמת החזרות",
   logistics: "מנהלת לוגיסטיקה",
   factory_manager: "מנהלת מפעל (צפייה)",
+  admin: "מנהל מערכת",
   external_client: "לקוח חיצוני",
 };
 
-const STORAGE_KEY = "sba_active_role";
 export const ROLE_CHANGED_EVENT = "sba.role.changed";
 
-export function getActiveRole(): Role {
-  if (typeof window === "undefined") return "coordinator";
-  return (localStorage.getItem(STORAGE_KEY) as Role) ?? "coordinator";
+export interface AuthSession {
+  userId: string;
+  displayName: string;
+  role: Role;
 }
 
-export function setActiveRole(role: Role) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, role);
-  window.dispatchEvent(new Event(ROLE_CHANGED_EVENT));
+// מצב session ברמת מודול — מאפשר ל-adapters (לא-React) לקרוא את הזהות הנוכחית.
+let current: AuthSession | null = null;
+
+export function setAuthSession(session: AuthSession | null) {
+  current = session;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(ROLE_CHANGED_EVENT));
+  }
+}
+
+/** התפקיד הפעיל. ברירת מחדל coordinator כשאין session (למשל מצב mock ללא Auth). */
+export function getActiveRole(): Role {
+  return current?.role ?? "coordinator";
+}
+
+export function getActiveUserId(): string | null {
+  return current?.userId ?? null;
+}
+
+/** שם להצגה/audit: שם העובד אם ידוע, אחרת תווית התפקיד. */
+export function getActiveActorName(): string {
+  if (current?.displayName) return current.displayName;
+  return ROLE_LABELS[getActiveRole()];
 }

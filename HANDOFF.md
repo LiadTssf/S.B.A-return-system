@@ -2,7 +2,7 @@
 
 # מסמך מסירה (Handoff) — S.B.A Return Management
 
-עודכן בסיום Day 2 (Parts 1–4). מיועד למפתחים שימשיכו את הפרויקט.
+עודכן בסיום Day 2 (Parts 1–4.5 — כולל Auth + RLS פנימי). מיועד למפתחים שימשיכו את הפרויקט.
 
 ## תמונת מצב כללית
 - **סטאק:** React 19 + Vite + TanStack Router (SPA) + Tailwind + shadcn, עברית RTL.
@@ -20,7 +20,7 @@
 | חיפוש מתקדם | שאילתות על נתוני אמת בלבד |
 | חסימת סגירת משאית | לפי `case_documents` אמיתיים (תעודה + תמונת משאית) |
 
-אומת ע"י: `smoke-supabase.mjs`, `smoke-search.mjs`, `smoke-docs.mjs` (כולם עברו מול ה-DB החי).
+אומת ע"י `scripts/smoke-auth.mjs` (מאומת — 19/19 מול ה-DB החי). **שים לב:** סקריפטי ה-anon הישנים נדחים אחרי `0006` — ראו סעיף אבטחה.
 
 ## ⚗️ עדיין אבטיפוס / סימולציה (mock — מסומן בבירור ב-UI)
 | מודול | מצב | סימון ב-UI |
@@ -30,9 +30,26 @@
 | בקשות לקוח (בכרטיס התיק) | mock — ריק במצב Supabase | `PrototypeNotice` |
 | תקשורת לקוח / הודעות | סימולציה — אין שליחה אמיתית | `PrototypeNotice` |
 | תזכורות | מקומי בדפדפן בלבד | `PrototypeNotice` |
-| תפקידים/הרשאות | בורר "מצב פיתוח"; RLS פתוח (`dev_all`) | תווית "מצב פיתוח" |
+
+(התחברות/תפקידים/RLS — **כבר אמיתי** מ-PART 4.5; ראו סעיף אבטחה למטה.)
 
 **עיקרון:** אף מודול mock אינו מציג רשומות תפעוליות מזויפות כאמיתיות — במצב Supabase הקריאות מוחזרות ריקות ומסומנות כאבטיפוס.
+
+## 🔐 אבטחה — Auth + RLS (מומש ב-PART 4.5, MVP)
+- **Supabase Auth** לעובדים: דף התחברות, session מתמשך, יציאה, ראוטים פנימיים מוגנים, חסימת משתמש לא-פעיל. הדפדפן משתמש ב-publishable key בלבד.
+- **טבלת `profiles`** (מקושרת ל-`auth.users`): `role` ∈ {coordinator, logistics, factory_manager, admin} + `is_active`. trigger יוצר פרופיל **לא-פעיל** לכל משתמש חדש; הפעלה ידנית ע"י admin (Dashboard + SQL).
+- **מקור התפקיד = הפרופיל המאומת** (בורר הפיתוח הוסר). מטריצת הרשאות מרכזית: `src/lib/permissions.ts`.
+- **RLS (`0006_rls.sql`)**: הוסר `dev_all`. טבלאות תפעוליות: SELECT=עובד פעיל · INSERT/UPDATE/DELETE=coordinator/logistics/admin. `factory_manager`=קריאה בלבד. `audit_logs`=immutable (ללא UPDATE/DELETE). **anon ללא גישה ישירה**. Storage `case-documents` מאובטח לעובדים פעילים. `audit.actor_id`=ה-uuid המאומת.
+
+### בדיקות אבטחה (מאומת מול ה-DB)
+- **`scripts/smoke-auth.mjs` — הבדיקה הקנונית** אחרי RLS (מתחבר עם `SMOKE_TEST_EMAIL/PASSWORD` מ-`.env.local`). 19/19: חיוב coordinator · שלילת anon · Storage · audit-immutable.
+- **`scripts/smoke-inactive.mjs`** — משתמש לא-פעיל: 5/5 (התחברות מצליחה אך גישה נדחית).
+- **סקריפטי anon ישנים (`smoke-supabase/search/docs`) צפויים להיכשל אחרי `0006`** (anon נחסם, מתוכנן). מ-pre-RLS — להריץ מול mock/dev או לעדכן לאימות.
+
+### פתוח / ידוע
+- **בדיקת `factory_manager` read-only חיה — עדיין pending** (לא נוצר משתמש כזה; אומת לוגית: התפקיד אינו ב-OPERATIONAL → כתיבה נדחית, קריאה מותרת).
+- **התפשטות שינוי הרשאה** (`is_active`/role): מתפשטת תוך שניות (cache PostgREST על פונקציות STABLE) — לא מיידי, מתכנס. אינו חור אבטחה.
+- **עקביות מחיקת מסמך↔Storage**: `documentsAdapter.remove`/`removeForSegment` מוחקים את אובייקט ה-Storage ואז את שורת ה-metadata, אך תוצאת `storage.remove()` אינה נבדקת → כשל ב-Storage עלול להשאיר אובייקט יתום (עלות בלבד, לא נראה למשתמש). אין מחיקת תיק קשיחה. המלצה עתידית: מעבר ל-archive/cancel.
 
 ## מסכים בטוחים להדגמה תפעולית (מול Supabase)
 דשבורד · תיקי החזרה · תיק מפורט (ליבה + מסמכים + תיאום + audit) · לוח שנה (תיאום) · התראות/action items · חיפוש מתקדם · יומן פעולות.
@@ -41,11 +58,11 @@
 `/lakoach` (סימולציית WhatsApp) · `/c/$token/*` (דפי לקוח). נשמרים בכוונה כשכבת המחשת-תהליך עד למימוש האמיתי.
 
 ## ⚠️ חובה לפני פיילוט אמיתי במפעל
-1. **Auth אמיתי** — Supabase Auth + טבלת `users` + תפקידים; להסיר את בורר התפקידים.
-2. **RLS לפי תפקיד** — להחליף את מדיניות `dev_all` (כרגע פתוחה לחלוטין) במדיניות הרשאות אמיתית.
-3. **טוקני לקוח** — טבלת `customer_tokens` + יצירה/אימות בצד שרת (Edge Function); אסור לייצר טוקנים בצד לקוח בלבד.
-4. **WhatsApp אמיתי** — ספק Business API (Epic 6).
-5. **תזכורות/הודעות** — להעביר ל-Supabase (+ נגזרת action items מתוזמנת).
+1. ✅ **Auth** — מומש (MVP, PART 4.5). חסר: ניהול משתמשים ב-UI (כרגע Dashboard/SQL), MFA/איפוס סיסמה.
+2. ✅ **RLS** — מומש (MVP, PART 4.5). חסר: בדיקת `factory_manager` חיה, חידוד תפקידים לפי דרישות עתידיות.
+3. **טוקני לקוח** — עדיין mock. יוקם ב-PART 5: `customer_submissions` + token lifecycle אמיתי + RPC צד-שרת (issue/revoke מאומת; validate/submit ל-anon). אסור לייצר טוקנים בצד לקוח בלבד.
+4. **WhatsApp אמיתי** — ספק Business API (Epic 6). הסימולטור יהפוך ללקוח דק מעל שירותי workflow משותפים.
+5. **תזכורות/הודעות** — עדיין mock; להעביר ל-Supabase (+ נגזרת action items מתוזמנת).
 6. **Penetration test** + גיבויים.
 7. תיקון `VITE_SUPABASE_URL` ב-`.env.local` לכתובת הבסיסית (יש נרמול אוטומטי, אך עדיף נקי).
 
@@ -65,8 +82,9 @@ npm run dev            # http://localhost:5173
 VITE_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=...
 ```
-Migrations (SQL Editor, לפי הסדר): `supabase/migrations/0001` → `0004`.
-בדיקות עשן מול ה-DB: `node scripts/smoke-supabase.mjs` · `smoke-search.mjs` · `smoke-docs.mjs`.
+Migrations (SQL Editor, לפי הסדר): `supabase/migrations/0001` → `0006`.
+בדיקות עשן מאומתות: `node scripts/smoke-auth.mjs` (+ `smoke-inactive.mjs` כשפרופיל הבדיקה מושבת). סקריפטי anon ישנים (`smoke-supabase/search/docs`) הם pre-RLS ונדחים אחרי `0006`.
+יצירת עובד ראשון: ראו `supabase/README.md`.
 
 ## מבנה שכבת הנתונים (להמשך מימוש)
 - `src/adapters/mock*Adapter.ts` — מימוש mock (localStorage).

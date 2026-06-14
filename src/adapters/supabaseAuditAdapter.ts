@@ -1,6 +1,6 @@
 // Supabase adapter ל-Audit Log — טבלת audit_logs.
 import { getSupabase } from "@/lib/supabase";
-import { getActiveRole, ROLE_LABELS, type Role } from "@/lib/roles";
+import { getActiveRole, getActiveUserId, ROLE_LABELS, type Role } from "@/lib/roles";
 import type { AuditAction, AuditEntry } from "@/lib/audit-types";
 
 export const AUDIT_EVENT = "sba.audit.changed";
@@ -51,7 +51,8 @@ export const supabaseAuditAdapter = {
         return_case_id: opts?.caseId ?? null,
         action_type: action,
         actor_role: role,
-        actor_id: ROLE_LABELS[role],
+        // משתמש מאומת אמיתי (uuid) כשקיים; נפילה לתווית תפקיד במצב mock
+        actor_id: getActiveUserId() ?? ROLE_LABELS[role],
         description: opts?.detail ?? null,
       });
       if (error) throw error;
