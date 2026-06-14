@@ -13,6 +13,16 @@ import { toast } from "sonner";
 
 const SYNC_MESSAGE = "sba.external_action_sync";
 
+// המרת dataURL (PNG מה-SignaturePad) ל-File להעלאה ל-Storage
+function dataUrlToFile(dataUrl: string, name: string): File {
+  const [meta, b64] = dataUrl.split(",");
+  const mime = /:(.*?);/.exec(meta)?.[1] ?? "image/png";
+  const bin = atob(b64);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return new File([arr], name, { type: mime });
+}
+
 export const Route = createFileRoute("/c/$token/sign")({
   head: () => ({ meta: [{ title: "חתימה דיגיטלית — ש.ב.א." }] }),
   component: SignPage,
@@ -46,16 +56,15 @@ function SignForm({ token, caseId, customer }: { token: string; caseId: string; 
 
   const submit = async () => {
     if (!canSubmit || !signature) return;
-    // TODO: Replace base64 with Supabase Storage upload + signed URL
+    const sigFile = dataUrlToFile(signature, `policy-signature-${caseId}.png`);
     const doc = await documentsAdapter.add({
       caseId,
-      title: `חתימה על נוהל החזרות - ${name.trim()}`,
-      category: "general",
+      category: "signed_policy",
       attachment: { type: "case" },
-      fileName: `policy-signature-${caseId}.png`,
-      mimeType: "image/png",
-      sizeBytes: Math.round((signature.length * 3) / 4),
-      dataUrl: signature,
+      file: sigFile,
+      fileName: sigFile.name,
+      mimeType: sigFile.type,
+      sizeBytes: sigFile.size,
       uploadedBy: name.trim(),
       uploadedByRole: "לקוח חיצוני",
     });

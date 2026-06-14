@@ -7,11 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { customerLinksAdapter, documentsAdapter, auditAdapter } from "@/adapters";
-import {
-  ACCEPTED_MIME,
-  MAX_FILE_BYTES,
-  formatBytes,
-} from "@/lib/document-types";
+import { ACCEPTED_MIME, MAX_FILE_BYTES, formatBytes } from "@/lib/document-types";
 import { toast } from "sonner";
 import type { CustomerLinkToken } from "@/lib/customer-link-types";
 
@@ -19,16 +15,6 @@ export const Route = createFileRoute("/c/$token/upload")({
   head: () => ({ meta: [{ title: "העלאת תעודה — ש.ב.א." }] }),
   component: UploadPage,
 });
-
-// TODO: Replace base64 with Supabase Storage upload + signed URL
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload = () => res(r.result as string);
-    r.onerror = () => rej(r.error);
-    r.readAsDataURL(file);
-  });
-}
 
 function UploadPage() {
   return (
@@ -44,7 +30,6 @@ function UploadPage() {
 }
 
 function UploadForm({ token, customer }: { token: CustomerLinkToken; customer: string }) {
-  const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [done, setDone] = useState(false);
 
@@ -56,20 +41,18 @@ function UploadForm({ token, customer }: { token: CustomerLinkToken; customer: s
   };
 
   const submit = async () => {
-    if (!file || !title.trim()) return;
+    if (!file) return;
     try {
-      const dataUrl = await fileToDataUrl(file);
       const doc = await documentsAdapter.add({
         caseId: token.caseId,
-        title: title.trim(),
-        category: "return_certificate",
+        category: "delivery_note",
         attachment: token.segmentId
           ? { type: "segment", segmentId: token.segmentId }
           : { type: "case" },
+        file,
         fileName: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
-        dataUrl,
         uploadedBy: "לקוח חיצוני",
         uploadedByRole: "לקוח חיצוני",
       });
@@ -77,9 +60,9 @@ function UploadForm({ token, customer }: { token: CustomerLinkToken; customer: s
         token: token.token,
         caseId: token.caseId,
         action: "upload_doc",
-        payload: { type: "upload_doc", documentId: doc.id, title: title.trim() },
+        payload: { type: "upload_doc", documentId: doc.id, title: file.name },
       });
-      auditAdapter.log("customer_doc_uploaded", { caseId: token.caseId, detail: title.trim() });
+      auditAdapter.log("customer_doc_uploaded", { caseId: token.caseId, detail: file.name });
       setDone(true);
       toast.success("הקובץ הועלה");
     } catch (e) {
@@ -101,16 +84,6 @@ function UploadForm({ token, customer }: { token: CustomerLinkToken; customer: s
   return (
     <ExternalShell title="העלאת תעודת משלוח" subtitle={`לקוח: ${customer}`}>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor="title">כותרת *</Label>
-        <Input
-          id="title"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          maxLength={120}
-          placeholder="לדוגמה: תעודת משלוח 4523"
-        />
-      </div>
-      <div className="flex flex-col gap-1.5">
         <Label htmlFor="file">קובץ *</Label>
         <Input
           id="file"
@@ -123,7 +96,7 @@ function UploadForm({ token, customer }: { token: CustomerLinkToken; customer: s
         )}
         <p className="text-xs text-muted-foreground">תמונה (JPG/PNG/WEBP) או PDF, עד {formatBytes(MAX_FILE_BYTES)}.</p>
       </div>
-      <Button onClick={submit} disabled={!file || !title.trim()} className="min-h-11 gap-2">
+      <Button onClick={submit} disabled={!file} className="min-h-11 gap-2">
         <Upload className="h-4 w-4" />
         העלה
       </Button>

@@ -1,5 +1,5 @@
-import type { CaseDocument, DocumentAttachment, DocumentCategory } from "@/lib/document-types";
-import { MAX_CASE_BYTES } from "@/lib/document-types";
+// מימוש mock למסמכים — localStorage. בשימוש רק כשאין Supabase.
+import type { CaseDocument } from "@/lib/document-types";
 
 const STORAGE_KEY = "sba.documents";
 const EVENT = "sba.documents.changed";
@@ -30,61 +30,33 @@ export function getCaseDocuments(caseId: string): CaseDocument[] {
 
 export function getSegmentDocuments(caseId: string, segmentId: string): CaseDocument[] {
   return read().filter(
-    (d) => d.caseId === caseId && d.attachment.type === "segment" && d.attachment.segmentId === segmentId,
-  );
-}
-
-/** האם קיימת תעודת החזרה למשאית */
-export function hasReturnCertificate(caseId: string, segmentId: string): boolean {
-  return read().some(
     (d) =>
       d.caseId === caseId &&
-      d.category === "return_certificate" &&
       d.attachment.type === "segment" &&
       d.attachment.segmentId === segmentId,
   );
 }
 
-/** האם קיימת תמונת משאית כלשהי לתיק (כללי או לסגמנט) */
-export function hasTruckPhoto(caseId: string, segmentId?: string): boolean {
+/** האם קיימת תעודת החזרה/משלוח לתיק (ברמת התיק) */
+export function hasReturnCertificate(caseId: string): boolean {
   return read().some(
     (d) =>
       d.caseId === caseId &&
-      d.category === "truck_photo" &&
-      (segmentId
-        ? (d.attachment.type === "case" ||
-          (d.attachment.type === "segment" && d.attachment.segmentId === segmentId))
-        : true),
+      (d.category === "return_certificate" || d.category === "delivery_note"),
   );
+}
+
+/** האם קיימת תמונת משאית לתיק (ברמת התיק) */
+export function hasTruckPhoto(caseId: string): boolean {
+  return read().some((d) => d.caseId === caseId && d.category === "truck_photo");
 }
 
 export function getCaseBytes(caseId: string): number {
   return getCaseDocuments(caseId).reduce((sum, d) => sum + d.sizeBytes, 0);
 }
 
-export interface AddDocumentInput {
-  caseId: string;
-  title: string;
-  category: DocumentCategory;
-  attachment: DocumentAttachment;
-  fileName: string;
-  mimeType: string;
-  sizeBytes: number;
-  dataUrl: string;
-  uploadedBy: string;
-  uploadedByRole: string;
-}
-
-export function addDocument(input: AddDocumentInput): CaseDocument {
-  const used = getCaseBytes(input.caseId);
-  if (used + input.sizeBytes > MAX_CASE_BYTES) {
-    throw new Error("חריגה ממכסת הקבצים לתיק (עד 5MB סך הכל באבטיפוס)");
-  }
-  const doc: CaseDocument = {
-    id: crypto.randomUUID(),
-    uploadedAt: new Date().toISOString(),
-    ...input,
-  };
+/** מוסיף מסמך מוכן (ה-adapter בונה את האובייקט, כולל dataUrl ל-mock) */
+export function addDocument(doc: CaseDocument): CaseDocument {
   const all = read();
   all.push(doc);
   write(all);
@@ -108,7 +80,11 @@ export function removeDocumentsForSegment(caseId: string, segmentId: string): vo
   write(
     read().filter(
       (d) =>
-        !(d.caseId === caseId && d.attachment.type === "segment" && d.attachment.segmentId === segmentId),
+        !(
+          d.caseId === caseId &&
+          d.attachment.type === "segment" &&
+          d.attachment.segmentId === segmentId
+        ),
     ),
   );
 }

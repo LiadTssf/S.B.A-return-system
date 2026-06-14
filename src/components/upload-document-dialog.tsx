@@ -35,44 +35,28 @@ interface Props {
   onOpenChange: (o: boolean) => void;
   segments: ScheduleSegment[];
   onSubmit: (data: {
-    title: string;
     category: DocumentCategory;
     attachment: DocumentAttachment;
     file: File;
-    dataUrl: string;
-  }) => void;
-}
-
-// TODO: Replace base64 with Supabase Storage upload + signed URL
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result as string);
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
+  }) => void | Promise<void>;
 }
 
 export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }: Props) {
-  const [title, setTitle] = useState("");
-  const [category, setCategory] = useState<DocumentCategory>("cargo_photo");
+  const [category, setCategory] = useState<DocumentCategory>("delivery_note");
   const [attachTo, setAttachTo] = useState<string>("case"); // "case" | segmentId
   const [file, setFile] = useState<File | null>(null);
+  const [busy, setBusy] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) {
-      setTitle("");
-      setCategory("cargo_photo");
-      setAttachTo(segments[0]?.id ?? "case");
+      setCategory("delivery_note");
+      setAttachTo("case");
       setFile(null);
+      setBusy(false);
       if (inputRef.current) inputRef.current.value = "";
     }
-  }, [open, segments]);
-
-  // תעודת החזרה חייבת להיות משויכת למשאית
-  const mustAttachToSegment = category === "return_certificate";
-  const segmentRequired = mustAttachToSegment && segments.length === 0;
+  }, [open]);
 
   const handlePick = (f: File | undefined) => {
     if (!f) return;
@@ -88,15 +72,15 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
   };
 
   const handleSubmit = async () => {
-    if (!title.trim()) return toast.error("יש להזין כותרת לקובץ");
     if (!file) return toast.error("יש לבחור קובץ");
-    if (mustAttachToSegment && (attachTo === "case" || !attachTo)) {
-      return toast.error("תעודת החזרה חייבת להיות משויכת למשאית מסוימת");
-    }
-    const dataUrl = await fileToDataUrl(file);
     const attachment: DocumentAttachment =
       attachTo === "case" ? { type: "case" } : { type: "segment", segmentId: attachTo };
-    onSubmit({ title: title.trim(), category, attachment, file, dataUrl });
+    setBusy(true);
+    try {
+      await onSubmit({ category, attachment, file });
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -111,17 +95,7 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
 
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="doc-title">כותרת *</Label>
-            <Input
-              id="doc-title"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="לדוגמה: תוכן משאית בעת העמסה"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1.5">
-            <Label>קטגוריה *</Label>
+            <Label>סוג מסמך *</Label>
             <Select value={category} onValueChange={(v) => setCategory(v as DocumentCategory)}>
               <SelectTrigger>
                 <SelectValue />
@@ -137,13 +111,13 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <Label>שיוך *</Label>
+            <Label>שיוך</Label>
             <Select value={attachTo} onValueChange={setAttachTo}>
               <SelectTrigger>
                 <SelectValue placeholder="בחרי שיוך" />
               </SelectTrigger>
               <SelectContent>
-                {!mustAttachToSegment && <SelectItem value="case">כללי לתיק</SelectItem>}
+                <SelectItem value="case">כללי לתיק</SelectItem>
                 {segments.map((s, i) => (
                   <SelectItem key={s.id} value={s.id}>
                     משאית {i + 1}
@@ -152,11 +126,6 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
                 ))}
               </SelectContent>
             </Select>
-            {segmentRequired && (
-              <p className="text-xs text-destructive">
-                אין משאיות בתיק. יש להוסיף משאית לפני העלאת תעודת החזרה.
-              </p>
-            )}
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -177,12 +146,12 @@ export function UploadDocumentDialog({ open, onOpenChange, segments, onSubmit }:
         </div>
 
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
             ביטול
           </Button>
-          <Button onClick={handleSubmit} disabled={segmentRequired} className="gap-2">
+          <Button onClick={handleSubmit} disabled={busy || !file} className="gap-2">
             <Upload className="h-4 w-4" />
-            העלה
+            {busy ? "מעלה…" : "העלה"}
           </Button>
         </DialogFooter>
       </DialogContent>

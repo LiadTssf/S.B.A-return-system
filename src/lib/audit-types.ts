@@ -8,6 +8,11 @@ export type AuditAction =
   | "upload_document"
   | "delete_document"
   | "document_viewed"
+  | "document_uploaded"
+  | "delivery_note_uploaded"
+  | "return_certificate_uploaded"
+  | "truck_photo_uploaded"
+  | "signed_policy_uploaded"
   | "external_link_visit"
   | "schedule_message"
   | "send_message"
@@ -29,7 +34,9 @@ export type AuditAction =
   | "action_item_handled"
   | "action_item_dismissed"
   | "truck_close_blocked"
-  | "truck_closed";
+  | "truck_closed"
+  | "truck_close_blocked_missing_required_documents"
+  | "truck_coordination_closed_successfully";
 
 export interface AuditEntry {
   id: string;
@@ -48,6 +55,11 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
   upload_document: "העלאת מסמך",
   delete_document: "מחיקת מסמך",
   document_viewed: "צפייה/הורדת מסמך",
+  document_uploaded: "העלאת מסמך",
+  delivery_note_uploaded: "העלאת תעודת משלוח",
+  return_certificate_uploaded: "העלאת תעודת החזרה",
+  truck_photo_uploaded: "העלאת תמונת משאית",
+  signed_policy_uploaded: "העלאת נוהל חתום",
   external_link_visit: "כניסת לקוח חיצוני",
   schedule_message: "תזמון הודעה",
   send_message: "שליחת הודעה",
@@ -70,4 +82,7 @@ export const ACTION_LABELS: Record<AuditAction, string> = {
   action_item_dismissed: "התעלמות מפעולה",
   truck_close_blocked: "סגירת תיאום משאית נחסמה",
   truck_closed: "סגירת תיאום משאית",
+  truck_close_blocked_missing_required_documents:
+    "סגירת תיאום משאית נחסמה — חסרים מסמכים",
+  truck_coordination_closed_successfully: "תיאום משאית נסגר בהצלחה",
 };

@@ -24,6 +24,7 @@ import {
 } from "@/lib/permissions";
 import { scheduleAdapter, documentsAdapter, casesAdapter, auditAdapter } from "@/adapters";
 import { useCaseDocuments } from "@/hooks/use-documents";
+import { useDocUrl } from "@/hooks/use-doc-url";
 import {
   DOCUMENT_CATEGORY_LABELS,
   isImage,
@@ -46,24 +47,15 @@ type DialogState =
   | { mode: "date"; segment?: ScheduleSegment; segmentIndex?: number }
   | { mode: "truck"; segment: ScheduleSegment; segmentIndex: number };
 
-// עזרים טהורים מעל רשימת המסמכים הריאקטיבית (במקום קריאות sync ל-store)
-function certForSegment(docs: CaseDocument[], segmentId: string): boolean {
+// בדיקת מסמכים נדרשים לסגירת תיאום משאית — ברמת התיק (PART 3):
+// (תעודת החזרה או תעודת משלוח) וגם תמונת משאית. נקרא מ-Supabase דרך useCaseDocuments.
+function hasReturnDoc(docs: CaseDocument[]): boolean {
   return docs.some(
-    (d) =>
-      d.category === "return_certificate" &&
-      d.attachment.type === "segment" &&
-      d.attachment.segmentId === segmentId,
+    (d) => d.category === "return_certificate" || d.category === "delivery_note",
   );
 }
-function photoForSegment(docs: CaseDocument[], segmentId?: string): boolean {
-  return docs.some(
-    (d) =>
-      d.category === "truck_photo" &&
-      (segmentId
-        ? (d.attachment.type === "case" ||
-          (d.attachment.type === "segment" && d.attachment.segmentId === segmentId))
-        : true),
-  );
+function hasTruckPhotoDoc(docs: CaseDocument[]): boolean {
+  return docs.some((d) => d.category === "truck_photo");
 }
 function docsForSegment(docs: CaseDocument[], segmentId: string): CaseDocument[] {
   return docs.filter(
@@ -152,12 +144,12 @@ export function ScheduleCard({ caseId, caseStatus, readOnly }: Props) {
 
   const handleReturned = async (iso: string, display: string) => {
     if (!returnedFor) return;
-    const hasCert = certForSegment(docs, returnedFor.id);
-    const hasPhoto = photoForSegment(docs, returnedFor.id);
+    const hasCert = hasReturnDoc(docs);
+    const hasPhoto = hasTruckPhotoDoc(docs);
     if (!hasCert || !hasPhoto) {
-      auditAdapter.log("truck_close_blocked", {
+      await auditAdapter.log("truck_close_blocked_missing_required_documents", {
         caseId,
-        detail: `חסר: ${[!hasCert && "תעודת החזרה", !hasPhoto && "תמונת משאית"]
+        detail: `חסר: ${[!hasCert && "תעודת החזרה/משלוח", !hasPhoto && "תמונת משאית"]
           .filter(Boolean)
           .join(" + ")}`,
       });
@@ -171,8 +163,11 @@ export function ScheduleCard({ caseId, caseStatus, readOnly }: Props) {
     if (!updated) return;
     const idx = segments.findIndex((s) => s.id === returnedFor.id) + 1;
     const nextSegments = segments.map((s) => (s.id === returnedFor.id ? updated : s));
-    auditAdapter.log("return_actual", { caseId, detail: `משאית ${idx} · ${display}` });
-    auditAdapter.log("truck_closed", { caseId, detail: `משאית ${idx} · ${display}` });
+    await auditAdapter.log("return_actual", { caseId, detail: `משאית ${idx} · ${display}` });
+    await auditAdapter.log("truck_coordination_closed_successfully", {
+      caseId,
+      detail: `משאית ${idx} · ${display}`,
+    });
     setReturnedFor(null);
     toast.success(`משאית ${idx} סומנה כהוחזרה`);
     await recomputeCaseStatus(nextSegments);
@@ -219,8 +214,8 @@ export function ScheduleCard({ caseId, caseStatus, readOnly }: Props) {
               canTruck={canTruck}
               canMark={canMark}
               canConfirm={canConfirm}
-              hasCertificate={certForSegment(docs, seg.id)}
-              hasTruckPhoto={photoForSegment(docs, seg.id)}
+              hasCertificate={hasReturnDoc(docs)}
+              hasTruckPhoto={hasTruckPhotoDoc(docs)}
               documents={docsForSegment(docs, seg.id)}
               onEditDate={() =>
                 setDialog({ mode: "date", segment: seg, segmentIndex: i + 1 })
@@ -362,35 +357,7 @@ function SegmentBlock({
           <span className="text-xs text-muted-foreground">קבצים משויכים</span>
           <ul className="flex flex-wrap gap-2">
             {documents.map((d) => (
-              <li key={d.id}>
-                <a
-                  href={d.dataUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  download={d.fileName}
-                  className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted"
-                  title={`${DOCUMENT_CATEGORY_LABELS[d.category]} · ${d.fileName}`}
-                >
-                  {isImage(d.mimeType) ? (
-                    <img
-                      src={d.dataUrl}
-                      alt={d.title}
-                      className="h-8 w-8 rounded object-cover"
-                    />
-                  ) : (
-                    <span className="flex h-8 w-8 items-center justify-center rounded bg-muted">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                    </span>
-                  )}
-                  <span className="flex flex-col items-start">
-                    <span className="max-w-[160px] truncate font-medium">{d.title}</span>
-                    <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <ImageIcon className="h-2.5 w-2.5" />
-                      {DOCUMENT_CATEGORY_LABELS[d.category]}
-                    </span>
-                  </span>
-                </a>
-              </li>
+              <AttachedDoc key={d.id} doc={d} />
             ))}
           </ul>
         </div>
@@ -435,7 +402,7 @@ function SegmentBlock({
           <div className="mb-1 font-semibold">תנאים לסגירת תיאום המשאית</div>
           <ul className="flex flex-col gap-0.5">
             <li className={hasCertificate ? "text-primary" : "text-destructive"}>
-              {hasCertificate ? "✓" : "✗"} תעודת החזרה הועלתה
+              {hasCertificate ? "✓" : "✗"} תעודת החזרה/משלוח הועלתה
             </li>
             <li className={hasPhoto ? "text-primary" : "text-destructive"}>
               {hasPhoto ? "✓" : "✗"} תמונת משאית הועלתה
@@ -449,6 +416,38 @@ function SegmentBlock({
         </div>
       )}
     </div>
+  );
+}
+
+function AttachedDoc({ doc: d }: { doc: CaseDocument }) {
+  const url = useDocUrl(d);
+  return (
+    <li>
+      <a
+        href={url ?? undefined}
+        target="_blank"
+        rel="noreferrer"
+        download={d.fileName}
+        className="flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-xs hover:bg-muted aria-disabled:opacity-50"
+        title={`${DOCUMENT_CATEGORY_LABELS[d.category]} · ${d.fileName}`}
+        aria-disabled={!url}
+      >
+        {isImage(d.mimeType) && url ? (
+          <img src={url} alt={d.fileName} className="h-8 w-8 rounded object-cover" />
+        ) : (
+          <span className="flex h-8 w-8 items-center justify-center rounded bg-muted">
+            <FileText className="h-4 w-4 text-muted-foreground" />
+          </span>
+        )}
+        <span className="flex flex-col items-start">
+          <span className="max-w-[160px] truncate font-medium">{d.fileName}</span>
+          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+            <ImageIcon className="h-2.5 w-2.5" />
+            {DOCUMENT_CATEGORY_LABELS[d.category]}
+          </span>
+        </span>
+      </a>
+    </li>
   );
 }
 

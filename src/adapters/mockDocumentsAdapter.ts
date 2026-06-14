@@ -1,11 +1,17 @@
-// Mock adapter למסמכים — נתוני דמה ב-localStorage (Base64 data URL).
-// TODO: Replace this adapter with Supabase Storage implementation
-//       (העלאת קובץ אמיתי + שמירת metadata בטבלת case_documents + signed URL).
+// Mock adapter למסמכים — localStorage + Base64. בשימוש רק כשאין Supabase.
 import * as store from "./mock/documents-store";
-import type { CaseDocument } from "@/lib/document-types";
+import type { AddDocumentInput, CaseDocument } from "@/lib/document-types";
 
 export const DOCUMENTS_EVENT = store.DOCUMENTS_EVENT;
-export type { AddDocumentInput } from "./mock/documents-store";
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result as string);
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(file);
+  });
+}
 
 export const mockDocumentsAdapter = {
   async listAll(): Promise<CaseDocument[]> {
@@ -17,17 +23,33 @@ export const mockDocumentsAdapter = {
   async listForSegment(caseId: string, segmentId: string): Promise<CaseDocument[]> {
     return store.getSegmentDocuments(caseId, segmentId);
   },
-  async hasReturnCertificate(caseId: string, segmentId: string): Promise<boolean> {
-    return store.hasReturnCertificate(caseId, segmentId);
+  async hasReturnCertificate(caseId: string, _segmentId?: string): Promise<boolean> {
+    return store.hasReturnCertificate(caseId);
   },
-  async hasTruckPhoto(caseId: string, segmentId?: string): Promise<boolean> {
-    return store.hasTruckPhoto(caseId, segmentId);
+  async hasTruckPhoto(caseId: string, _segmentId?: string): Promise<boolean> {
+    return store.hasTruckPhoto(caseId);
   },
   async caseBytes(caseId: string): Promise<number> {
     return store.getCaseBytes(caseId);
   },
-  async add(input: store.AddDocumentInput): Promise<CaseDocument> {
-    return store.addDocument(input);
+  async add(input: AddDocumentInput): Promise<CaseDocument> {
+    const dataUrl = await fileToDataUrl(input.file);
+    const doc: CaseDocument = {
+      id: crypto.randomUUID(),
+      caseId: input.caseId,
+      title: input.fileName,
+      category: input.category,
+      attachment: input.attachment,
+      fileName: input.fileName,
+      mimeType: input.mimeType,
+      sizeBytes: input.sizeBytes,
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: input.uploadedBy,
+      uploadedByRole: input.uploadedByRole,
+      storageProvider: "mock",
+      dataUrl,
+    };
+    return store.addDocument(doc);
   },
   async remove(id: string): Promise<void> {
     store.removeDocument(id);
@@ -35,12 +57,9 @@ export const mockDocumentsAdapter = {
   async removeForSegment(caseId: string, segmentId: string): Promise<void> {
     store.removeDocumentsForSegment(caseId, segmentId);
   },
-  /**
-   * החזרת URL לצפייה/הורדה. במימוש ה-mock זהו ה-dataUrl (Base64).
-   * TODO: ב-Supabase יוחזר signed URL מ-Storage.
-   */
+  /** mock — מחזיר את ה-dataUrl (Base64). */
   async getViewUrl(doc: CaseDocument): Promise<string> {
-    return doc.dataUrl;
+    return doc.dataUrl ?? "";
   },
   subscribe(cb: () => void): () => void {
     const h = () => cb();

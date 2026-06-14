@@ -16,6 +16,7 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useRole } from "@/hooks/use-role";
 import { useCaseDocuments } from "@/hooks/use-documents";
+import { useDocUrl } from "@/hooks/use-doc-url";
 import { useSchedule } from "@/hooks/use-schedule";
 import {
   can,
@@ -29,7 +30,9 @@ import {
   formatBytes,
   isImage,
   type CaseDocument,
+  type DocumentCategory,
 } from "@/lib/document-types";
+import type { AuditAction } from "@/lib/audit-types";
 import { documentsAdapter, auditAdapter } from "@/adapters";
 import { toast } from "sonner";
 import { UploadDocumentDialog } from "./upload-document-dialog";
@@ -39,6 +42,14 @@ interface Props {
   isClosed: boolean;
   caseCreatedBy: string;
 }
+
+// audit ספציפי לפי סוג מסמך
+const TYPE_AUDIT: Partial<Record<DocumentCategory, AuditAction>> = {
+  delivery_note: "delivery_note_uploaded",
+  return_certificate: "return_certificate_uploaded",
+  truck_photo: "truck_photo_uploaded",
+  signed_policy: "signed_policy_uploaded",
+};
 
 export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
   const role = useRole();
@@ -53,6 +64,14 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
 
   const canUpload = !isClosed && can(role, CAN_UPLOAD_DOCUMENT);
   const canDelete = !isClosed && can(role, CAN_DELETE_DOCUMENT);
+
+  const openPreview = (d: CaseDocument) => {
+    setPreview(d);
+    auditAdapter.log("document_viewed", {
+      caseId,
+      detail: `${DOCUMENT_CATEGORY_LABELS[d.category]} · ${d.fileName}`,
+    });
+  };
 
   const generalDocs = docs.filter((d) => d.attachment.type === "case");
   const docsBySegment = (segId: string) =>
@@ -97,7 +116,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
                   <DocList
                     docs={segDocs}
                     canDelete={canDelete}
-                    onPreview={setPreview}
+                    onPreview={openPreview}
                     onDelete={setToDelete}
                   />
                 </div>
@@ -109,7 +128,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
                 <DocList
                   docs={generalDocs}
                   canDelete={canDelete}
-                  onPreview={setPreview}
+                  onPreview={openPreview}
                   onDelete={setToDelete}
                 />
               </div>
@@ -126,20 +145,19 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
           try {
             const doc = await documentsAdapter.add({
               caseId,
-              title: input.title,
               category: input.category,
               attachment: input.attachment,
+              file: input.file,
               fileName: input.file.name,
               mimeType: input.file.type,
               sizeBytes: input.file.size,
-              dataUrl: input.dataUrl,
               uploadedBy: caseCreatedBy || ROLE_LABELS[role],
               uploadedByRole: ROLE_LABELS[role],
             });
-            auditAdapter.log("upload_document", {
-              caseId,
-              detail: `${DOCUMENT_CATEGORY_LABELS[doc.category]} · ${doc.title}`,
-            });
+            const detail = `${DOCUMENT_CATEGORY_LABELS[doc.category]} · ${doc.fileName}`;
+            await auditAdapter.log("document_uploaded", { caseId, detail });
+            const specific = TYPE_AUDIT[doc.category];
+            if (specific) await auditAdapter.log(specific, { caseId, detail });
             toast.success("הקובץ הועלה");
             setUploadOpen(false);
           } catch (e) {
@@ -153,7 +171,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
           <AlertDialogHeader>
             <AlertDialogTitle>מחיקת קובץ</AlertDialogTitle>
             <AlertDialogDescription>
-              למחוק את "{toDelete?.title}"? לא ניתן לשחזר פעולה זו.
+              למחוק את "{toDelete?.fileName}"? לא ניתן לשחזר פעולה זו.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -164,7 +182,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
                 await documentsAdapter.remove(toDelete.id);
                 auditAdapter.log("delete_document", {
                   caseId,
-                  detail: `${DOCUMENT_CATEGORY_LABELS[toDelete.category]} · ${toDelete.title}`,
+                  detail: `${DOCUMENT_CATEGORY_LABELS[toDelete.category]} · ${toDelete.fileName}`,
                 });
                 toast.success("הקובץ נמחק");
                 setToDelete(null);
@@ -178,34 +196,7 @@ export function DocumentsCard({ caseId, isClosed, caseCreatedBy }: Props) {
 
       <Dialog open={!!preview} onOpenChange={(o) => !o && setPreview(null)}>
         <DialogContent className="max-w-3xl">
-          {preview && (
-            <div className="flex flex-col gap-2">
-              <div className="flex flex-col gap-0.5">
-                <h3 className="text-base font-semibold">{preview.title}</h3>
-                <p className="text-xs text-muted-foreground">
-                  {DOCUMENT_CATEGORY_LABELS[preview.category]} · {preview.fileName} ·{" "}
-                  {formatBytes(preview.sizeBytes)}
-                </p>
-              </div>
-              {isImage(preview.mimeType) ? (
-                <img
-                  src={preview.dataUrl}
-                  alt={preview.title}
-                  className="max-h-[70vh] w-full rounded-md object-contain"
-                />
-              ) : (
-                <div className="flex flex-col items-center gap-3 rounded-md border border-border bg-muted/30 p-6">
-                  <FileText className="h-10 w-10 text-muted-foreground" />
-                  <p className="text-sm">{preview.fileName}</p>
-                  <Button asChild>
-                    <a href={preview.dataUrl} target="_blank" rel="noreferrer" download={preview.fileName}>
-                      פתיחה / הורדה
-                    </a>
-                  </Button>
-                </div>
-              )}
-            </div>
-          )}
+          {preview && <DocPreview doc={preview} />}
         </DialogContent>
       </Dialog>
     </Card>
@@ -226,57 +217,114 @@ function DocList({
   return (
     <ul className="flex flex-col gap-2">
       {docs.map((d) => (
-        <li
+        <DocRow
           key={d.id}
-          className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2"
-        >
-          <button
-            type="button"
-            onClick={() => onPreview(d)}
-            className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background"
-            aria-label={`צפייה ב-${d.title}`}
-          >
-            {isImage(d.mimeType) ? (
-              <img src={d.dataUrl} alt={d.title} className="h-full w-full object-cover" />
-            ) : (
-              <FileText className="h-5 w-5 text-muted-foreground" />
-            )}
-          </button>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <button
-              type="button"
-              onClick={() => onPreview(d)}
-              className="truncate text-right text-sm font-medium hover:underline"
-            >
-              {d.title}
-            </button>
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-              <Badge variant="outline" className="gap-1 font-normal">
-                {isImage(d.mimeType) ? (
-                  <ImageIcon className="h-3 w-3" />
-                ) : (
-                  <Paperclip className="h-3 w-3" />
-                )}
-                {DOCUMENT_CATEGORY_LABELS[d.category]}
-              </Badge>
-              <span>{formatBytes(d.sizeBytes)}</span>
-              <span>·</span>
-              <span>{d.uploadedByRole}</span>
-            </div>
-          </div>
-          {canDelete && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-              onClick={() => onDelete(d)}
-              aria-label={`מחק ${d.title}`}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          )}
-        </li>
+          doc={d}
+          canDelete={canDelete}
+          onPreview={onPreview}
+          onDelete={onDelete}
+        />
       ))}
     </ul>
+  );
+}
+
+function DocRow({
+  doc: d,
+  canDelete,
+  onPreview,
+  onDelete,
+}: {
+  doc: CaseDocument;
+  canDelete: boolean;
+  onPreview: (d: CaseDocument) => void;
+  onDelete: (d: CaseDocument) => void;
+}) {
+  const url = useDocUrl(isImage(d.mimeType) ? d : null);
+  return (
+    <li className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 p-2">
+      <button
+        type="button"
+        onClick={() => onPreview(d)}
+        className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-background"
+        aria-label={`צפייה ב-${d.fileName}`}
+      >
+        {isImage(d.mimeType) && url ? (
+          <img src={url} alt={d.fileName} className="h-full w-full object-cover" />
+        ) : (
+          <FileText className="h-5 w-5 text-muted-foreground" />
+        )}
+      </button>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <button
+          type="button"
+          onClick={() => onPreview(d)}
+          className="truncate text-right text-sm font-medium hover:underline"
+        >
+          {d.fileName}
+        </button>
+        <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+          <Badge variant="outline" className="gap-1 font-normal">
+            {isImage(d.mimeType) ? (
+              <ImageIcon className="h-3 w-3" />
+            ) : (
+              <Paperclip className="h-3 w-3" />
+            )}
+            {DOCUMENT_CATEGORY_LABELS[d.category]}
+          </Badge>
+          <span>{formatBytes(d.sizeBytes)}</span>
+          {d.uploadedByRole && (
+            <>
+              <span>·</span>
+              <span>{d.uploadedByRole}</span>
+            </>
+          )}
+        </div>
+      </div>
+      {canDelete && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+          onClick={() => onDelete(d)}
+          aria-label={`מחק ${d.fileName}`}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      )}
+    </li>
+  );
+}
+
+function DocPreview({ doc }: { doc: CaseDocument }) {
+  const url = useDocUrl(doc);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <h3 className="text-base font-semibold">{doc.fileName}</h3>
+        <p className="text-xs text-muted-foreground">
+          {DOCUMENT_CATEGORY_LABELS[doc.category]} · {formatBytes(doc.sizeBytes)}
+        </p>
+      </div>
+      {!url ? (
+        <div className="p-6 text-center text-sm text-muted-foreground">טוען…</div>
+      ) : isImage(doc.mimeType) ? (
+        <img
+          src={url}
+          alt={doc.fileName}
+          className="max-h-[70vh] w-full rounded-md object-contain"
+        />
+      ) : (
+        <div className="flex flex-col items-center gap-3 rounded-md border border-border bg-muted/30 p-6">
+          <FileText className="h-10 w-10 text-muted-foreground" />
+          <p className="text-sm">{doc.fileName}</p>
+          <Button asChild>
+            <a href={url} target="_blank" rel="noreferrer" download={doc.fileName}>
+              פתיחה / הורדה
+            </a>
+          </Button>
+        </div>
+      )}
+    </div>
   );
 }
