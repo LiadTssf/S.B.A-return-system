@@ -1,42 +1,56 @@
+// hooks לנתוני לקוח אמיתיים (Supabase): טוקנים והגשות לתיק.
+// במצב mock (ללא Supabase) מחזירים ריק — זרימת הלקוח מבוססת-Supabase בלבד.
 import { useCallback, useEffect, useState } from "react";
-import { customerLinksAdapter } from "@/adapters";
-import type {
-  CustomerLinkToken,
-  CustomerSubmission,
-} from "@/lib/customer-link-types";
+import { SUPABASE_ENABLED } from "@/adapters";
+import {
+  supabaseCustomerLinksAdapter,
+  type SubmissionRecord,
+  type TokenRecord,
+} from "@/adapters/supabaseCustomerLinksAdapter";
 
-export function useCaseTokens(caseId: string): CustomerLinkToken[] {
-  const [items, setItems] = useState<CustomerLinkToken[]>([]);
+export function useCaseSubmissions(caseId: string) {
+  const [items, setItems] = useState<SubmissionRecord[]>([]);
+  const [loading, setLoading] = useState(false);
   const refresh = useCallback(() => {
-    customerLinksAdapter.tokensForCase(caseId).then(setItems);
+    if (!SUPABASE_ENABLED || !caseId) {
+      setItems([]);
+      return;
+    }
+    setLoading(true);
+    supabaseCustomerLinksAdapter
+      .submissionsForCase(caseId)
+      .then(setItems)
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
   }, [caseId]);
   useEffect(() => {
     refresh();
-    return customerLinksAdapter.subscribe(refresh);
+    if (typeof window === "undefined") return;
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
-  return items;
+  return { items, loading, refresh };
 }
 
-export function useCaseSubmissions(caseId: string): CustomerSubmission[] {
-  const [items, setItems] = useState<CustomerSubmission[]>([]);
+export function useCaseTokens(caseId: string) {
+  const [items, setItems] = useState<TokenRecord[]>([]);
   const refresh = useCallback(() => {
-    customerLinksAdapter.submissionsForCase(caseId).then(setItems);
+    if (!SUPABASE_ENABLED || !caseId) {
+      setItems([]);
+      return;
+    }
+    supabaseCustomerLinksAdapter
+      .tokensForCase(caseId)
+      .then(setItems)
+      .catch(() => setItems([]));
   }, [caseId]);
   useEffect(() => {
     refresh();
-    return customerLinksAdapter.subscribe(refresh);
+    if (typeof window === "undefined") return;
+    const onFocus = () => refresh();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
   }, [refresh]);
-  return items;
-}
-
-export function usePendingSubmissions(caseId: string): CustomerSubmission[] {
-  const [items, setItems] = useState<CustomerSubmission[]>([]);
-  const refresh = useCallback(() => {
-    customerLinksAdapter.pendingForCase(caseId).then(setItems);
-  }, [caseId]);
-  useEffect(() => {
-    refresh();
-    return customerLinksAdapter.subscribe(refresh);
-  }, [refresh]);
-  return items;
+  return { items, refresh };
 }

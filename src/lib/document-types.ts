@@ -44,6 +44,8 @@ export interface CaseDocument {
   storageProvider?: string;
   bucketName?: string;
   objectPath?: string;
+  /** אם המסמך נוצר מהגשת לקוח — מזהה הטוקן שייצר אותו (לקישור הגשה↔מסמך). */
+  customerTokenId?: string;
   // ── fallback mock בלבד (Base64) ──
   dataUrl?: string;
 }

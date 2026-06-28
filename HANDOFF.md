@@ -2,6 +2,8 @@
 
 # מסמך מסירה (Handoff) — S.B.A Return Management
 
+> ⚠️ **מסמך כללי — נכון ל-Day 2 / PART 4.5.** ל-PART 5 (workflow לקוח + backend ל-intake, מיגרציות 0007–0010) המסמך הסמכותי והעדכני הוא **`CLAUDE_HANDOFF_PART5_PROGRESS.md`**. קרא אותו תחילה לכל עבודת PART 5+.
+
 עודכן בסיום Day 2 (Parts 1–4.5 — כולל Auth + RLS פנימי). מיועד למפתחים שימשיכו את הפרויקט.
 
 ## תמונת מצב כללית

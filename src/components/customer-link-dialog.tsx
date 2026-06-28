@@ -19,14 +19,17 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { useRole } from "@/hooks/use-role";
-import { ROLE_LABELS } from "@/lib/roles";
-import { customerLinksAdapter, auditAdapter } from "@/adapters";
+import { supabaseCustomerLinksAdapter, CustomerLinkError } from "@/adapters/supabaseCustomerLinksAdapter";
+import { SUPABASE_ENABLED } from "@/adapters";
 import {
   CUSTOMER_ACTION_LABELS,
   CUSTOMER_ACTION_PATHS,
   type CustomerActionType,
 } from "@/lib/customer-link-types";
+import {
+  DOCUMENT_CATEGORY_LABELS,
+  type DocumentCategory,
+} from "@/lib/document-types";
 import type { ScheduleSegment } from "@/lib/schedule-types";
 
 interface Props {
@@ -36,12 +39,8 @@ interface Props {
   segments: ScheduleSegment[];
 }
 
-const ACTIONS: CustomerActionType[] = [
-  "sign_policy",
-  "schedule",
-  "upload_doc",
-  "cancel_request",
-];
+const ACTIONS: CustomerActionType[] = ["sign_policy", "schedule", "upload_doc", "cancel_request"];
+const UPLOAD_DOC_TYPES: DocumentCategory[] = ["delivery_note", "return_certificate", "other"];
 
 function buildUrl(token: string, action: CustomerActionType): string {
   const base = typeof window !== "undefined" ? window.location.origin : "";
@@ -49,35 +48,51 @@ function buildUrl(token: string, action: CustomerActionType): string {
 }
 
 export function CustomerLinkDialog({ open, onOpenChange, caseId, segments }: Props) {
-  const role = useRole();
-  const [action, setAction] = useState<CustomerActionType>("sign_policy");
+  const [action, setAction] = useState<CustomerActionType>("schedule");
   const [segmentId, setSegmentId] = useState<string>("");
+  const [docType, setDocType] = useState<DocumentCategory>("delivery_note");
   const [createdUrl, setCreatedUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const needsSegment = action === "upload_doc" && segments.length > 1;
+  const isFileAction = action === "sign_policy" || action === "upload_doc";
 
-  // TODO: replace token validation with Supabase customer_tokens table
   const handleCreate = async () => {
-    const t = await customerLinksAdapter.createToken({
-      caseId,
-      action,
-      segmentId: needsSegment ? segmentId || undefined : segments[0]?.id,
-      createdBy: ROLE_LABELS[role],
-    });
-    const url = buildUrl(t.token, t.action);
-    setCreatedUrl(url);
-    auditAdapter.log("customer_link_created", {
-      caseId,
-      detail: CUSTOMER_ACTION_LABELS[action],
-    });
-    void navigator.clipboard?.writeText(url).catch(() => undefined);
-    toast.success("הקישור נוצר והועתק ללוח");
+    if (!SUPABASE_ENABLED) {
+      toast.error("יצירת קישור דורשת חיבור Supabase");
+      return;
+    }
+    if (busy) return;
+    setBusy(true);
+    try {
+      const issued = await supabaseCustomerLinksAdapter.issueToken({
+        caseId,
+        action,
+        segmentId: needsSegment ? segmentId || undefined : segments[0]?.id,
+        documentType: action === "upload_doc" ? docType : undefined,
+      });
+      const url = buildUrl(issued.token, action);
+      setCreatedUrl(url);
+      void navigator.clipboard?.writeText(url).catch(() => undefined);
+      toast.success("הקישור נוצר והועתק ללוח");
+    } catch (e) {
+      const msg =
+        e instanceof CustomerLinkError && e.kind === "duplicate_active"
+          ? "כבר קיים קישור פעיל לפעולה זו. יש לבטל או להחליף אותו תחילה."
+          : e instanceof CustomerLinkError
+            ? e.message
+            : "יצירת הקישור נכשלה";
+      toast.error(msg);
+    } finally {
+      setBusy(false);
+    }
   };
 
   const handleClose = () => {
     setCreatedUrl(null);
-    setAction("sign_policy");
+    setAction("schedule");
     setSegmentId("");
+    setDocType("delivery_note");
     onOpenChange(false);
   };
 
@@ -93,7 +108,7 @@ export function CustomerLinkDialog({ open, onOpenChange, caseId, segments }: Pro
         <DialogHeader>
           <DialogTitle>יצירת קישור ללקוח</DialogTitle>
           <DialogDescription>
-            הקישור חד-פעמי, תקף 7 ימים, ונשלח ללקוח דרך WhatsApp/SMS/Email.
+            הקישור חד-פעמי, תקף 24 שעות, ונשלח ללקוח דרך WhatsApp/SMS/Email.
           </DialogDescription>
         </DialogHeader>
 
@@ -115,6 +130,24 @@ export function CustomerLinkDialog({ open, onOpenChange, caseId, segments }: Pro
               </Select>
             </div>
 
+            {action === "upload_doc" && (
+              <div className="flex flex-col gap-1.5">
+                <Label>סוג המסמך הנדרש *</Label>
+                <Select value={docType} onValueChange={(v) => setDocType(v as DocumentCategory)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UPLOAD_DOC_TYPES.map((d) => (
+                      <SelectItem key={d} value={d}>
+                        {DOCUMENT_CATEGORY_LABELS[d]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {needsSegment && (
               <div className="flex flex-col gap-1.5">
                 <Label>שיוך משאית (אופציונלי)</Label>
@@ -134,13 +167,17 @@ export function CustomerLinkDialog({ open, onOpenChange, caseId, segments }: Pro
               </div>
             )}
 
+            {isFileAction && (
+              <p className="rounded-md border border-accent/40 bg-accent/10 p-2 text-xs text-accent-foreground">
+                שים לב: העלאת קבצים/חתימה מאובטחת מהלקוח טרם הופעלה (תלוי ברכיב ההעלאה). הקישור יוצג ללקוח עם הודעת "בקרוב".
+              </p>
+            )}
+
             <DialogFooter className="gap-2">
-              <Button variant="outline" onClick={handleClose}>
-                ביטול
-              </Button>
-              <Button onClick={handleCreate} className="gap-2">
+              <Button variant="outline" onClick={handleClose}>ביטול</Button>
+              <Button onClick={handleCreate} disabled={busy} className="gap-2">
                 <LinkIcon className="h-4 w-4" />
-                צור קישור
+                {busy ? "יוצר..." : "צור קישור"}
               </Button>
             </DialogFooter>
           </div>
@@ -155,7 +192,7 @@ export function CustomerLinkDialog({ open, onOpenChange, caseId, segments }: Pro
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                שלחי ללקוח דרך הערוץ המועדף. הקישור יידרש פעם אחת בלבד.
+                שלחי ללקוח דרך הערוץ המועדף. הקישור יידרש פעם אחת בלבד ותקף 24 שעות.
               </p>
             </div>
             <DialogFooter>

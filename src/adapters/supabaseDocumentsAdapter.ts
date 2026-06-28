@@ -32,6 +32,7 @@ function toDoc(r: any): CaseDocument {
     storageProvider: r.storage_provider ?? "supabase",
     bucketName: r.bucket_name ?? BUCKET,
     objectPath: r.object_path,
+    customerTokenId: r.customer_token_id ?? undefined,
   };
 }
 

@@ -2,61 +2,101 @@ import { useEffect, useState } from "react";
 import { AlertCircle } from "lucide-react";
 import { ExternalShell } from "./external-shell";
 import { PrototypeNotice } from "./prototype-notice";
-import { casesAdapter, customerLinksAdapter, auditAdapter, SUPABASE_ENABLED } from "@/adapters";
+import { SUPABASE_ENABLED } from "@/adapters";
+import {
+  supabaseCustomerLinksAdapter,
+  type TokenValidation,
+} from "@/adapters/supabaseCustomerLinksAdapter";
 import {
   CUSTOMER_ACTION_LABELS,
   type CustomerActionType,
-  type CustomerLinkToken,
 } from "@/lib/customer-link-types";
-import type { ReturnCase } from "@/lib/case-types";
+import type { DocumentCategory } from "@/lib/document-types";
 
-interface Props {
-  token: string;
-  expectedAction: CustomerActionType;
-  children: (ctx: { token: CustomerLinkToken; caseData: ReturnCase }) => React.ReactNode;
+/** ההקשר המינימלי שמגיע מ-validate_customer_token (נגזר מהטוקן בלבד). */
+export interface ExternalTokenContext {
+  rawToken: string;
+  action: CustomerActionType;
+  documentType: DocumentCategory | null;
+  projectName: string | null;
+  site: string | null;
+  expiresAt?: string;
 }
 
-// TODO: replace token validation with Supabase customer_tokens table
-/** ולידציה ל-token, לוגינג של ביקור, ורנדור של הילד רק כשהכל תקין. */
+interface Props {
+  token: string; // הטוקן הגולמי מה-URL — מקור האמת היחיד
+  expectedAction: CustomerActionType;
+  children: (ctx: ExternalTokenContext) => React.ReactNode;
+}
+
+const REASONS: Record<NonNullable<TokenValidation["reason"]>, { title: string; message: string }> = {
+  not_found: { title: "הקישור אינו קיים", message: "ייתכן שהקישור הועתק חלקית או שאינו תקין." },
+  expired: { title: "הקישור פג תוקף", message: "הקישור היה בתוקף 24 שעות מרגע יצירתו. פני אלינו לקבלת קישור חדש." },
+  consumed: { title: "הקישור כבר נוצל", message: "כל קישור מאפשר ביצוע פעולה פעם אחת בלבד." },
+  revoked: { title: "הקישור בוטל", message: "הקישור בוטל על ידי הצוות. פני אלינו לקבלת קישור חדש." },
+};
+
+/**
+ * ולידציה של הטוקן הגולמי מול validate_customer_token (Supabase),
+ * גזירת הפעולה המותרת מהטוקן, ורנדור הילד רק כשהכל תקין.
+ * אינו סומך על action/caseId/הקשר מפרמטרי ה-URL מעבר לטוקן הגולמי.
+ */
 export function ExternalTokenGuard({ token, expectedAction, children }: Props) {
   const [state, setState] = useState<
     | { kind: "loading" }
-    | { kind: "ok"; t: CustomerLinkToken; c: ReturnCase }
+    | { kind: "ok"; ctx: ExternalTokenContext }
     | { kind: "error"; title: string; message: string }
   >({ kind: "loading" });
 
   useEffect(() => {
+    let alive = true;
     (async () => {
-      const v = await customerLinksAdapter.validateToken(token);
-      if (!v.ok) {
-        const map = {
-          not_found: { title: "הקישור אינו קיים", message: "ייתכן שהקישור הועתק חלקית או שנמחק." },
-          expired: { title: "הקישור פג תוקף", message: "הקישור היה בתוקף 7 ימים מרגע יצירתו. פני אלינו לקבלת קישור חדש." },
-          consumed: { title: "הקישור כבר נוצל", message: "כל קישור מאפשר ביצוע פעולה פעם אחת בלבד." },
-        } as const;
-        setState({ kind: "error", ...map[v.reason] });
-        return;
-      }
-      if (v.token.action !== expectedAction) {
+      if (!SUPABASE_ENABLED) {
         setState({
           kind: "error",
-          title: "סוג קישור לא מתאים",
-          message: `הקישור הזה מיועד ל"${CUSTOMER_ACTION_LABELS[v.token.action]}".`,
+          title: "הקישור אינו זמין",
+          message: "אימות הקישורים דורש חיבור Supabase פעיל.",
         });
         return;
       }
-      casesAdapter.rehydrateFromHash();
-      const c = await casesAdapter.get(v.token.caseId);
-      if (!c) {
-        setState({ kind: "error", title: "התיק אינו קיים", message: "לא נמצא תיק תואם לקישור זה." });
-        return;
+      try {
+        const v = await supabaseCustomerLinksAdapter.validateToken(token);
+        if (!alive) return;
+        if (!v.valid) {
+          setState({ kind: "error", ...REASONS[v.reason ?? "not_found"] });
+          return;
+        }
+        if (v.action !== expectedAction) {
+          setState({
+            kind: "error",
+            title: "סוג קישור לא מתאים",
+            message: `הקישור הזה מיועד ל"${CUSTOMER_ACTION_LABELS[v.action as CustomerActionType]}".`,
+          });
+          return;
+        }
+        setState({
+          kind: "ok",
+          ctx: {
+            rawToken: token,
+            action: v.action as CustomerActionType,
+            documentType: v.documentType ?? null,
+            projectName: v.projectName ?? null,
+            site: v.site ?? null,
+            expiresAt: v.expiresAt,
+          },
+        });
+      } catch {
+        if (!alive) return;
+        setState({
+          kind: "error",
+          title: "שגיאה באימות הקישור",
+          message: "אירעה תקלה זמנית. נסי שוב מאוחר יותר.",
+        });
       }
-      auditAdapter.log("external_link_visit", {
-        caseId: c.id,
-        detail: CUSTOMER_ACTION_LABELS[v.token.action],
-      });
-      setState({ kind: "ok", t: v.token, c });
     })();
+    return () => {
+      alive = false;
+    };
   }, [token, expectedAction]);
 
   if (state.kind === "loading") {
@@ -73,14 +113,14 @@ export function ExternalTokenGuard({ token, expectedAction, children }: Props) {
           <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
           <p className="text-destructive">{state.message}</p>
         </div>
-        {SUPABASE_ENABLED && (
-          <PrototypeNotice title="ממשק לקוח חיצוני — אבטיפוס">
-            אימות הקישורים החד-פעמיים עדיין אינו מחובר ל-Supabase. למימוש נדרש: טבלת
-            customer_tokens + יצירה/אימות טוקן בצד שרת (Edge Function).
+        {!SUPABASE_ENABLED && (
+          <PrototypeNotice title="ממשק לקוח חיצוני — דורש Supabase">
+            דפי הלקוח החיצוניים פועלים מול שירותי ה-Supabase האמיתיים (validate/submit).
+            הגדר VITE_SUPABASE_URL / ANON_KEY כדי להפעילם.
           </PrototypeNotice>
         )}
       </ExternalShell>
     );
   }
-  return <>{children({ token: state.t, caseData: state.c })}</>;
+  return <>{children(state.ctx)}</>;
 }

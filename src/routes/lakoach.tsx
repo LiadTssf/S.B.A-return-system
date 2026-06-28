@@ -102,8 +102,9 @@ function LakoachPage() {
       <div className="flex items-start gap-2 rounded-md border border-accent/40 bg-accent/10 p-3 text-xs">
         <Info className="h-4 w-4 shrink-0 text-accent-foreground" />
         <p className="text-accent-foreground">
-          סימולציה בלבד — לא מחובר ל-WhatsApp אמיתי. פתיחת/עדכון תיק נשמרים ב-Supabase,
-          אך שכבת הלקוח (הודעות, קישורים חד-פעמיים, חתימות, בקשות) היא אבטיפוס ואינה נשמרת ב-Supabase.
+          סימולציה של ערוץ WhatsApp בלבד — אין חיבור ל-WhatsApp אמיתי (Meta API/templates).
+          הטוקנים, הקישורים החד-פעמיים, ההגשות ומצב התהליך הם <strong>אמיתיים ב-Supabase</strong> ומשתמשים
+          באותם שירותים משותפים. חתימה/העלאת מסמך מאובטחת מהלקוח טרם הופעלה (ממתינה לרכיב ההעלאה).
         </p>
       </div>
 

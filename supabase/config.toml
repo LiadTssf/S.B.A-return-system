@@ -1,0 +1,18 @@
+# תצורת Supabase CLI (לפריסת Edge Functions). אין כאן סודות.
+# ה-project ref מקושר דרך `supabase link` (לא נשמר כאן).
+project_id = "sba-return-management"
+
+# Edge Function להנפקת signed-upload-URL ללקוח חיצוני אנונימי.
+#
+# verify_jwt = false — מכוון ומנומק:
+#   • הקורא הוא לקוח חיצוני אנונימי (אין session עובד). supabase-js שולח את מפתח
+#     ה-publishable (sb_publishable_...) שאינו JWT; verify_jwt=true היה דוחה אותו.
+#   • ההרשאה העסקית היא הטוקן החד-פעמי בלבד — מאומת בצד-שרת (active/לא-פג/לא-used/
+#     לא-revoked), כל ההקשר נגזר ממנו, והפונקציה אינה צורכת אותו.
+#   • הגנות שנותרו: CORS allowlist · אימות טוקן · ולידציית גוף/גודל/MIME · service key
+#     בצד-שרת בלבד · שגיאות גנריות · אי-תיעוד סודות.
+#   • אבטחת abuse לפני פיילוט ציבורי: rate-limiting (edge/WAF) — מתועד כנדרש.
+# (אין להשבית JWT רק "כדי שיעבוד" — כאן זו הבחירה הנכונה לנקודת-קצה ציבורית עם מפתח
+#  publishable שאינו JWT; אם הפרויקט יחזור ל-anon JWT, ניתן לשקול הפעלה מחדש.)
+[functions.request-customer-upload]
+verify_jwt = false
